@@ -110,7 +110,7 @@ export class CameraSource {
     try {
       this.logger.info(`Snapshot for ${this.ringCamera.name} Requested`)
 
-      const snapshot = await this.ringCamera.getSnapshot(true)
+      const snapshot = await this.ringCamera.getSnapshot()
       this.logger.info(
         `Snapshot for ${this.ringCamera.name} Received (${getDurationSeconds(
           start

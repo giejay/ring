@@ -284,58 +284,7 @@ export class RingCamera {
   private lastSnapshotTimestampLocal = 0
   private lastSnapshotPromise?: Promise<Buffer>
 
-  private async refreshSnapshot() {
-    const currentTimestampAge = Date.now() - this.lastSnapshotTimestampLocal
-    if (this.isTimestampInLifeTime(currentTimestampAge)) {
-      logInfo(
-        `Snapshot for ${
-          this.name
-        } is still within it's life time (${currentTimestampAge / 1000}s old)`
-      )
-      return true
-    }
-
-    for (let i = 0; i < maxSnapshotRefreshAttempts; i++) {
-      const { timestamp, inLifeTime } = await this.getSnapshotTimestamp()
-
-      if (!timestamp && this.isOffline) {
-        throw new Error(
-          `No snapshot available and device ${this.name} is offline`
-        )
-      }
-
-      if (inLifeTime) {
-        return false
-      }
-
-      await delay(snapshotRefreshDelay)
-    }
-
-    throw new Error(
-      `Snapshot failed to refresh after ${maxSnapshotRefreshAttempts} attempts`
-    )
-  }
-
-  async getSnapshot(allowStale = false) {
-    this.refreshSnapshotInProgress =
-      this.refreshSnapshotInProgress || this.refreshSnapshot()
-
-    try {
-      const useLastSnapshot = await this.refreshSnapshotInProgress
-
-      if (useLastSnapshot && this.lastSnapshotPromise) {
-        this.refreshSnapshotInProgress = undefined
-        return this.lastSnapshotPromise
-      }
-    } catch (e) {
-      logError(e.message)
-      if (!allowStale) {
-        throw e
-      }
-    }
-
-    this.refreshSnapshotInProgress = undefined
-
+  getSnapshot() {
     this.lastSnapshotPromise = this.restClient.request<Buffer>({
       url: clientApi(`snapshots/image/${this.id}`),
       responseType: 'arraybuffer'
