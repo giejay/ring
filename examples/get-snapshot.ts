@@ -5,7 +5,7 @@ import fs from 'promise-fs'
 
 const request = require('request-promise');
 
-let retrievingSnapshot = false, currentSnapshot: Buffer, snapshotSent: Buffer;
+// let retrievingSnapshot = false, currentSnapshot: Buffer, snapshotSent: Buffer;
 const {env} = process,
   openHabMotionUrl: string = env.OPENHAB_MOTION as string,
   openHabRingUrl: string = env.OPENHAB_RING as string,
@@ -23,52 +23,64 @@ function updateOpenHab(url: string, body: string, type: string): Promise<any> {
   });
 }
 
-async function writeSnapshot() {
-  if (snapshotSent !== currentSnapshot) {
+async function getSnapshot(camera: RingCamera) {
+  try {
+    const time = new Date().getTime(), snapshot = await camera.getSnapshot();
+    console.log(`Retrieved snapshot in ${new Date().getTime() - time} ms`);
+    return snapshot;
+  } catch (error) {
+    console.log('Could not retrieve snapshot', error);
+  }
+}
+
+async function writeSnapshot(snapshot: Buffer) {
+  try {
     const fileName = `front-door-${new Date().getTime()}.jpg`,
       filePath = openHabSnapshotFolder + fileName;
-    await fs.writeFile(filePath, currentSnapshot);
+    await fs.writeFile(filePath, snapshot);
     await fs.symlink(openHabSnapshotFolder + 'front-door-latest.jpg', filePath, () => null);
     console.log('The file was saved!');
-    snapshotSent = currentSnapshot;
+    // snapshotSent = currentSnapshot;
     return fileName;
+  } catch (error) {
+    console.log('Could not write snapshot', error);
   }
-  return undefined;
 }
 
 async function sendSnapshot(camera: RingCamera, count = 0) {
-  if (count === maxSnapshots || !currentSnapshot) {
+  if (count === maxSnapshots) {
+    // if (count === maxSnapshots || !currentSnapshot) {
     return;
   }
-  try {
-    const fileName = await writeSnapshot();
+  const snapshot = await getSnapshot(camera);
+  if (snapshot) {
+    const fileName = await writeSnapshot(snapshot);
     if (fileName) {
-      await updateOpenHab(openHabSnapshotUrl, fileName, 'Snapshot ' + (count + 1));
-      console.log('Openhab was updated with latest snapshot info');
+      try {
+        await updateOpenHab(openHabSnapshotUrl, fileName, 'Snapshot ' + (count + 1));
+        console.log('Openhab was updated with latest snapshot info');
+        setTimeout(() => {
+          sendSnapshot(camera, count + 1);
+        }, snapshotInterval);
+      } catch (error) {
+        console.log('Could not send snapshot', error);
+      }
     }
-  } catch (error) {
-    console.log('Could not send snapshot', error);
   }
-  setTimeout(() => {
-    sendSnapshot(camera, count + 1);
-  }, snapshotInterval);
 }
 
-function retrieveSnapshots(camera: RingCamera) {
-  setInterval(async () => {
-    if (!retrievingSnapshot) {
-      retrievingSnapshot = true;
-      try {
-        const time = new Date().getTime();
-        currentSnapshot = await camera.getSnapshot();
-        console.log(`Retrieved snapshot in ${new Date().getTime() - time} ms`);
-      } catch (error) {
-        console.log('Could not retrieve snapshot', error);
-      }
-      retrievingSnapshot = false;
-    }
-  }, snapshotInterval);
-}
+// function retrieveSnapshots(camera: RingCamera) {
+//   setInterval(async () => {
+//     if (!retrievingSnapshot) {
+//       retrievingSnapshot = true;
+//       const snap = await getSnapshot(camera);
+//       if (snap) {
+//         currentSnapshot = snap;
+//       }
+//       retrievingSnapshot = false;
+//     }
+//   }, snapshotInterval);
+// }
 
 async function main() {
   const ringApi = new RingApi({
@@ -102,7 +114,7 @@ async function main() {
       console.log(`${event} on ${camera.name} camera. Ding id ${ding.id_str}.  Received at ${new Date()}`)
     });
 
-    retrieveSnapshots(camera);
+    // retrieveSnapshots(camera);
 
     console.log('Listening for motion and doorbell presses on your cameras.')
   }

@@ -1,17 +1,17 @@
 import 'dotenv/config'
-import { RingApi } from '../api'
-import { skip } from 'rxjs/operators'
+import {RingApi} from '../api'
+import {skip} from 'rxjs/operators'
 
 async function example() {
-  const { env } = process,
+  const {env} = process,
     ringApi = new RingApi({
       // Replace with your ring email/password
       email: env.RING_EMAIL!,
       password: env.RING_PASS!,
       // Refresh token is used when 2fa is on
-      refreshToken: env.RING_REFRESH_TOKEN!,
       // Listen for dings and motion events
-      cameraDingsPollingSeconds: 2
+      cameraDingsPollingSeconds: 2,
+      debug: true
     }),
     locations = await ringApi.getLocations(),
     allCameras = await ringApi.getCameras()
@@ -52,6 +52,9 @@ async function example() {
 
   if (allCameras.length) {
     allCameras.forEach(camera => {
+      camera.onData.subscribe(some => {
+        console.log(some);
+      })
       camera.onNewDing.subscribe(ding => {
         const event =
           ding.kind === 'motion'
@@ -63,7 +66,7 @@ async function example() {
         console.log(
           `${event} on ${camera.name} camera. Ding id ${
             ding.id_str
-          }.  Received at ${new Date()}`
+            }.  Received at ${new Date()}`
         )
       })
     })
