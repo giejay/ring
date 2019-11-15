@@ -59,14 +59,14 @@ async function sendSnapshot(camera: RingCamera, count = 0) {
       try {
         await updateOpenHab(openHabSnapshotUrl, fileName, 'Snapshot ' + (count + 1));
         console.log('Openhab was updated with latest snapshot info');
-        setTimeout(() => {
-          sendSnapshot(camera, count + 1);
-        }, snapshotInterval);
       } catch (error) {
         console.log('Could not send snapshot', error);
       }
     }
   }
+  setTimeout(() => {
+    sendSnapshot(camera, count + 1);
+  }, snapshotInterval);
 }
 
 // function retrieveSnapshots(camera: RingCamera) {
