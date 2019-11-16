@@ -1,10 +1,9 @@
 /* eslint-disable object-curly-spacing */
+const TelegramBot = require('node-telegram-bot-api');
 import 'dotenv/config'
 import {RingApi, RingCamera} from '../api'
 import fs from 'promise-fs'
 import * as path from 'path';
-
-const TelegramBot = require('node-telegram-bot-api');
 
 const request = require('request-promise');
 
@@ -27,8 +26,8 @@ const {env} = process,
 const bot = new TelegramBot(telegramToken, {polling: false});
 
 function updateOpenHab(url: string, body: string, type: string): Promise<any> {
-  return request.put({url: url, body: body, headers: {'content-type': 'text/plain'}}).then((res: any) => {
-    console.log('Updated openhab for ' + type, res);
+  return request.put({url: url, body: body, headers: {'content-type': 'text/plain'}}).then(() => {
+    console.log('Updated openhab for ' + type);
   }, (err: any) => {
     return console.log('Could not update openhab for ' + type, err);
   });
@@ -84,12 +83,15 @@ async function sendVideo(camera: RingCamera) {
   try {
     const fileName = `front-door-${new Date().getTime()}.mp4`,
       filePath = path.join(openHabSnapshotFolder, fileName);
+    console.log('Recording to file: ' + filePath);
     await camera.recordToFile(filePath, videoLength);
     let symLink = path.join(openHabSnapshotFolder, 'front-door-latest.mp4');
-    if(fs.existsSync(symLink)){
+    console.log('Creating symlink: ' + symLink);
+    if (fs.existsSync(symLink)) {
       await fs.unlink(symLink);
     }
     fs.symlinkSync(filePath, symLink);
+    console.log('Sending telegram');
     return bot.sendVideo(telegramChatId, filePath);
   } catch (error) {
     console.log('Could not send video', error);
@@ -121,9 +123,10 @@ async function main() {
     [camera] = await ringApi.getCameras();
 
   if (camera) {
+    await sendVideo(camera);
     (camera as any).snapshotLifeTime = 10000;
     camera.onNewDing.subscribe(async ding => {
-      if(processing){
+      if (processing) {
         return;
       }
       const event =
@@ -136,24 +139,20 @@ async function main() {
       processing = true;
       try {
         if (ding.kind === 'ding') {
-          await updateOpenHab(openHabRingUrl, 'ON', 'Ring');
-          // sendSnapshot(camera);
-          await sendVideo(camera);
+          await Promise.all([updateOpenHab(openHabRingUrl, 'ON', 'Ring'), sendVideo(camera)].map(p => p.catch(e => e)))
+            .then(results => console.log(results));
         } else if (ding.kind === 'motion') {
           await updateOpenHab(openHabMotionUrl, 'ON', 'Motion');
           if (sendSnapshotForMotion) {
-            // sendSnapshot(camera);
             await sendVideo(camera);
           }
         }
-      } catch(error){
+      } catch (error) {
         console.log('Error handling event', error);
       } finally {
         processing = false;
       }
     });
-
-    // retrieveSnapshots(camera);
 
     console.log('Listening for motion and doorbell presses on your cameras.')
   }
