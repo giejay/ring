@@ -51,6 +51,8 @@ async function example() {
   }
 
   if (allCameras.length) {
+    const sn = await allCameras[0].getSnapshot();
+    console.log(sn);
     allCameras.forEach(camera => {
       camera.onData.subscribe(some => {
         console.log(some);

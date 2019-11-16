@@ -2,8 +2,13 @@
 import 'dotenv/config'
 import {RingApi, RingCamera} from '../api'
 import fs from 'promise-fs'
+import * as path from 'path';
+
+const TelegramBot = require('node-telegram-bot-api');
 
 const request = require('request-promise');
+
+let processing = false;
 
 // let retrievingSnapshot = false, currentSnapshot: Buffer, snapshotSent: Buffer;
 const {env} = process,
@@ -11,9 +16,15 @@ const {env} = process,
   openHabRingUrl: string = env.OPENHAB_RING as string,
   openHabSnapshotFolder: string = env.OPENHAB_SNAPSHOT_FOLDER as string,
   openHabSnapshotUrl: string = env.OPENHAB_SNAPSHOT_URL as string,
+  // openHabVideoUrl: string = env.OPENHAB_VIDEO_URL as string,
+  videoLength: number = parseInt(env.VIDEO_LENGTH as string) || 4,
   sendSnapshotForMotion = !!env.SEND_SNAPSHOT_MOTION,
-  maxSnapshots = parseInt(env.MAX_SNAPSHOTS as string, 0) || 3,
-  snapshotInterval = (parseInt(env.SNAPSHOT_INTERVAL as string, 0) * 1000) || 30000;
+  maxSnapshots = parseInt(env.MAX_SNAPSHOTS as string) || 3,
+  snapshotInterval = (parseInt(env.SNAPSHOT_INTERVAL as string) * 1000) || 30000,
+  telegramToken = env.TELEGRAM_TOKEN as string,
+  telegramChatId = parseInt(env.TELEGRAM_CHAT_ID as string);
+
+const bot = new TelegramBot(telegramToken, {polling: false});
 
 function updateOpenHab(url: string, body: string, type: string): Promise<any> {
   return request.put({url: url, body: body, headers: {'content-type': 'text/plain'}}).then((res: any) => {
@@ -36,9 +47,9 @@ async function getSnapshot(camera: RingCamera) {
 async function writeSnapshot(snapshot: Buffer) {
   try {
     const fileName = `front-door-${new Date().getTime()}.jpg`,
-      filePath = openHabSnapshotFolder + fileName;
+      filePath = path.join(openHabSnapshotFolder, fileName);
     await fs.writeFile(filePath, snapshot);
-    await fs.symlink(openHabSnapshotFolder + 'front-door-latest.jpg', filePath, () => null);
+    await fs.symlink(filePath, path.join(openHabSnapshotFolder, 'front-door-latest.jpg'), () => null);
     console.log('The file was saved!');
     // snapshotSent = currentSnapshot;
     return fileName;
@@ -69,6 +80,22 @@ async function sendSnapshot(camera: RingCamera, count = 0) {
   }, snapshotInterval);
 }
 
+async function sendVideo(camera: RingCamera) {
+  try {
+    const fileName = `front-door-${new Date().getTime()}.mp4`,
+      filePath = path.join(openHabSnapshotFolder, fileName);
+    await camera.recordToFile(filePath, videoLength);
+    let symLink = path.join(openHabSnapshotFolder, 'front-door-latest.mp4');
+    if(fs.existsSync(symLink)){
+      await fs.unlink(symLink);
+    }
+    fs.symlinkSync(filePath, symLink);
+    return bot.sendVideo(telegramChatId, filePath);
+  } catch (error) {
+    console.log('Could not send video', error);
+  }
+}
+
 // function retrieveSnapshots(camera: RingCamera) {
 //   setInterval(async () => {
 //     if (!retrievingSnapshot) {
@@ -95,23 +122,35 @@ async function main() {
 
   if (camera) {
     (camera as any).snapshotLifeTime = 10000;
-    camera.onNewDing.subscribe(ding => {
+    camera.onNewDing.subscribe(async ding => {
+      if(processing){
+        return;
+      }
       const event =
         ding.kind === 'motion'
           ? 'Motion detected'
           : ding.kind === 'ding'
           ? 'Doorbell pressed'
           : `Video started (${ding.kind})`;
-      if (ding.kind === 'ding') {
-        updateOpenHab(openHabRingUrl, 'ON', 'Ring');
-        sendSnapshot(camera);
-      } else if (ding.kind === 'motion') {
-        updateOpenHab(openHabMotionUrl, 'ON', 'Motion');
-        if (sendSnapshotForMotion) {
-          sendSnapshot(camera);
+      console.log(`${event} on ${camera.name} camera. Ding id ${ding.id_str}.  Received at ${new Date()}`);
+      processing = true;
+      try {
+        if (ding.kind === 'ding') {
+          await updateOpenHab(openHabRingUrl, 'ON', 'Ring');
+          // sendSnapshot(camera);
+          await sendVideo(camera);
+        } else if (ding.kind === 'motion') {
+          await updateOpenHab(openHabMotionUrl, 'ON', 'Motion');
+          if (sendSnapshotForMotion) {
+            // sendSnapshot(camera);
+            await sendVideo(camera);
+          }
         }
+      } catch(error){
+        console.log('Error handling event', error);
+      } finally {
+        processing = false;
       }
-      console.log(`${event} on ${camera.name} camera. Ding id ${ding.id_str}.  Received at ${new Date()}`)
     });
 
     // retrieveSnapshots(camera);
