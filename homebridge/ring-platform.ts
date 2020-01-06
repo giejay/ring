@@ -3,7 +3,8 @@ import {
   RingCamera,
   RingDevice,
   RingDeviceType,
-  RingDeviceCategory
+  RingDeviceCategory,
+  RingCameraKind
 } from '../api'
 import { HAP, hap } from './hap'
 import { SecurityPanel } from './security-panel'
@@ -26,8 +27,14 @@ import { RingAuth } from '../api/rest-client'
 import { platformName, pluginName } from './plugin-info'
 import { useLogger } from '../api/util'
 import { BaseAccessory } from './base-accessory'
+import { FloodFreezeSensor } from './flood-freeze-sensor'
+import { FreezeSensor } from './freeze-sensor'
 
-const debug = __filename.includes('release-homebridge')
+const debug = __filename.includes('release-homebridge'),
+  unsupportedDeviceTypes: (RingDeviceType | RingCameraKind)[] = [
+    RingDeviceType.BaseStation,
+    RingDeviceType.Keypad
+  ]
 
 process.env.RING_DEBUG = debug ? 'true' : ''
 
@@ -41,6 +48,10 @@ function getAccessoryClass(
       return ContactSensor
     case RingDeviceType.MotionSensor:
       return MotionSensor
+    case RingDeviceType.FloodFreezeSensor:
+      return FloodFreezeSensor
+    case RingDeviceType.FreezeSensor:
+      return FreezeSensor
     case RingDeviceType.SecurityPanel:
       return SecurityPanel
     case RingDeviceType.BaseStation:
@@ -171,8 +182,13 @@ export class RingPlatform {
           if (
             !AccessoryClass ||
             (this.config.hideLightGroups &&
-              device.deviceType === RingDeviceType.BeamsLightGroupSwitch)
+              device.deviceType === RingDeviceType.BeamsLightGroupSwitch) ||
+            (this.config.hideUnsupportedServices &&
+              unsupportedDeviceTypes.includes(device.deviceType))
           ) {
+            this.log.info(
+              `Hidden accessory ${device.deviceType} ${displayName}`
+            )
             return
           }
 

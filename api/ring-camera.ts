@@ -20,12 +20,7 @@ import {
   take
 } from 'rxjs/operators'
 import { createSocket } from 'dgram'
-import {
-  bindToRandomPort,
-  getPublicIp,
-  reservePorts,
-  SrtpOptions
-} from './rtp-utils'
+import { bindToPort, getPublicIp, reservePorts, SrtpOptions } from './rtp-utils'
 import { delay, logError, logInfo } from './util'
 import { FfmpegOptions, SipSession } from './sip-session'
 
@@ -245,10 +240,11 @@ export class RingCamera {
     })
   }
 
-  async getRecording(dingIdStr: string) {
-    const response = await this.restClient.request<{ url: string }>({
-      url: clientApi(`dings/${dingIdStr}/share/play?disable_redirect=true`)
-    })
+  async getRecording(dingIdStr: string, transcoded = false) {
+    const path = transcoded ? 'recording' : 'share/play',
+      response = await this.restClient.request<{ url: string }>({
+        url: clientApi(`dings/${dingIdStr}/${path}?disable_redirect=true`)
+      })
     return response.url
   }
 
@@ -284,7 +280,58 @@ export class RingCamera {
   private lastSnapshotTimestampLocal = 0
   private lastSnapshotPromise?: Promise<Buffer>
 
-  getSnapshot() {
+  private async refreshSnapshot() {
+    const currentTimestampAge = Date.now() - this.lastSnapshotTimestampLocal
+    if (this.isTimestampInLifeTime(currentTimestampAge)) {
+      logInfo(
+        `Snapshot for ${
+          this.name
+        } is still within its life time (${currentTimestampAge / 1000}s old)`
+      )
+      return true
+    }
+
+    for (let i = 0; i < maxSnapshotRefreshAttempts; i++) {
+      const { timestamp, inLifeTime } = await this.getSnapshotTimestamp()
+
+      if (!timestamp && this.isOffline) {
+        throw new Error(
+          `No snapshot available and device ${this.name} is offline`
+        )
+      }
+
+      if (inLifeTime) {
+        return false
+      }
+
+      await delay(snapshotRefreshDelay)
+    }
+
+    throw new Error(
+      `Snapshot failed to refresh after ${maxSnapshotRefreshAttempts} attempts`
+    )
+  }
+
+  async getSnapshot(allowStale = false) {
+    this.refreshSnapshotInProgress =
+      this.refreshSnapshotInProgress || this.refreshSnapshot()
+
+    try {
+      const useLastSnapshot = await this.refreshSnapshotInProgress
+
+      if (useLastSnapshot && this.lastSnapshotPromise) {
+        this.refreshSnapshotInProgress = undefined
+        return this.lastSnapshotPromise
+      }
+    } catch (e) {
+      logError(e.message)
+      if (!allowStale) {
+        throw e
+      }
+    }
+
+    this.refreshSnapshotInProgress = undefined
+
     this.lastSnapshotPromise = this.restClient.request<Buffer>({
       url: clientApi(`snapshots/image/${this.id}`),
       responseType: 'arraybuffer'
@@ -331,8 +378,8 @@ export class RingCamera {
       ] = await Promise.all([
         this.getSipOptions(),
         getPublicIp(),
-        bindToRandomPort(videoSocket),
-        bindToRandomPort(audioSocket),
+        bindToPort(videoSocket, { forExternalUse: true }),
+        bindToPort(audioSocket, { forExternalUse: true }),
         reservePorts()
       ]),
       rtpOptions = {
