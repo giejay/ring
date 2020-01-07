@@ -1,5 +1,6 @@
 /* eslint-disable object-curly-spacing */
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBot = require('node-telegram-bot-api'),
+express = require('express');
 import 'dotenv/config'
 import {RingApi, RingCamera} from '../api'
 import fs from 'promise-fs'
@@ -118,12 +119,16 @@ async function main() {
       password: env.RING_PASS!,
       // Refresh token is used when 2fa is on
       // Listen for dings and motion events
-      cameraDingsPollingSeconds: 2
+      cameraDingsPollingSeconds: 2,
+      externalPorts: {
+        start: 15000,
+        end: 15050,
+      }
     }),
     [camera] = await ringApi.getCameras();
 
   if (camera) {
-    await sendVideo(camera);
+    // await sendVideo(camera);
     (camera as any).snapshotLifeTime = 10000;
     camera.onNewDing.subscribe(async ding => {
       if (processing) {
@@ -156,6 +161,17 @@ async function main() {
 
     console.log('Listening for motion and doorbell presses on your cameras.')
   }
+
+  const app = express();
+  app.use('/send-video', async (req: any, res: any) => {
+    await sendVideo(camera);
+    res.status(200).send('send video to telegram');
+  });
+  app.listen(3000, () => {
+    console.log(
+      'Listening on port 3000.  Go to http://localhost:3000 in your browser'
+    )
+  });
 }
 
 main();
