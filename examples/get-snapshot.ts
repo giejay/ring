@@ -119,11 +119,11 @@ async function main() {
       password: env.RING_PASS!,
       // Refresh token is used when 2fa is on
       // Listen for dings and motion events
-      cameraDingsPollingSeconds: 2,
-      externalPorts: {
-        start: 15000,
-        end: 15050,
-      }
+      cameraDingsPollingSeconds: 2
+      // externalPorts: {
+      //   start: 15000,
+      //   end: 15050,
+      // }
     }),
     [camera] = await ringApi.getCameras();
 
