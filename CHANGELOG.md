@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [5.13.1](https://github.com/dgreif/ring/compare/v5.13.0...v5.13.1) (2020-01-15)
+
+
+### Bug Fixes
+
+* handle delayed and expired dings when starting live video ([b6c4460](https://github.com/dgreif/ring/commit/b6c4460468ac5aa8e5085b51020d288058923e5d)), closes [#211](https://github.com/dgreif/ring/issues/211) [#157](https://github.com/dgreif/ring/issues/157) [#106](https://github.com/dgreif/ring/issues/106)
+* handle live stream for battery cameras ([8c74a23](https://github.com/dgreif/ring/commit/8c74a2343aa1aeb0954c36f37f0318ea08aff634))
+
+## [5.13.0](https://github.com/dgreif/ring/compare/v5.13.0-alpha.0...v5.13.0) (2020-01-11)
+
+
+### Bug Fixes
+
+* automatically subscribe cameras to motion and dings ([7bf4260](https://github.com/dgreif/ring/commit/7bf4260a7056a8eea87becd92d156fff914c45e5)), closes [#210](https://github.com/dgreif/ring/issues/210)
+* get or create active ding via new live_view endpoint ([4fb837e](https://github.com/dgreif/ring/commit/4fb837e1647c9bbc629cdf236680376d6451e546))
+
 ## [5.13.0-alpha.0](https://github.com/dgreif/ring/compare/v5.12.1...v5.13.0-alpha.0) (2020-01-05)
 
 
