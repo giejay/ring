@@ -16,7 +16,7 @@ async function example() {
       email: process.env.RING_EMAIL!,
       password: process.env.RING_PASS!,
       // Refresh token is used when 2fa is on
-      refreshToken: process.env.RING_REFRESH_TOKEN!,
+      refreshToken: process.env.RING_TOKEN!,
       debug: true
     }),
     [camera] = await ringApi.getCameras()
