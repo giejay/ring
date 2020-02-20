@@ -169,7 +169,7 @@ async function main() {
     publicOutputDirectory = path.join('public', 'output');
 
   if (!(await promisify(fs.exists)(publicOutputDirectory))) {
-    await fs.mkdir(publicOutputDirectory)
+    await fs.mkdir(publicOutputDirectory, {recursive: true})
   }
 
   app.use('/send-video', async (req: any, res: any) => {

@@ -14,6 +14,8 @@ RUN apt-get -y install ffmpeg
 
 COPY lib/api /app/api
 
+COPY public/index.html /app/public/index.html
+
 COPY lib/examples/get-snapshot.js /app/server/index.js
 
 CMD ["node", "/app/server/index.js"]
