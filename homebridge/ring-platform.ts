@@ -1,10 +1,10 @@
 import {
   RingApi,
   RingCamera,
+  RingCameraKind,
   RingDevice,
-  RingDeviceType,
   RingDeviceCategory,
-  RingCameraKind
+  RingDeviceType
 } from '../api'
 import { HAP, hap } from './hap'
 import { SecurityPanel } from './security-panel'
@@ -24,11 +24,11 @@ import { Switch } from './switch'
 import { Camera } from './camera'
 import { PanicButtons } from './panic-buttons'
 import { RingAuth } from '../api/rest-client'
-import { platformName, pluginName } from './plugin-info'
 import { useLogger } from '../api/util'
 import { BaseAccessory } from './base-accessory'
 import { FloodFreezeSensor } from './flood-freeze-sensor'
 import { FreezeSensor } from './freeze-sensor'
+import { TemperatureSensor } from './temperature-sensor'
 
 const debug = __filename.includes('release-homebridge'),
   unsupportedDeviceTypes: (RingDeviceType | RingCameraKind)[] = [
@@ -36,15 +36,22 @@ const debug = __filename.includes('release-homebridge'),
     RingDeviceType.Keypad
   ]
 
+export const platformName = 'Ring'
+export const pluginName = 'homebridge-ring'
 process.env.RING_DEBUG = debug ? 'true' : ''
 
 function getAccessoryClass(
-  device: RingDevice | RingCamera
+  device: RingDevice
 ): (new (...args: any[]) => BaseAccessory<RingDevice>) | null {
   const { deviceType } = device
 
+  if (device.data.status === 'disabled') {
+    return null
+  }
+
   switch (deviceType) {
     case RingDeviceType.ContactSensor:
+    case RingDeviceType.RetrofitZone:
       return ContactSensor
     case RingDeviceType.MotionSensor:
       return MotionSensor
@@ -78,6 +85,8 @@ function getAccessoryClass(
       return MultiLevelSwitch
     case RingDeviceType.Switch:
       return Switch
+    case RingDeviceType.TemperatureSensor:
+      return TemperatureSensor
   }
 
   if (/^lock($|\.)/.test(deviceType)) {
@@ -158,7 +167,10 @@ export class RingPlatform {
               isCamera,
               id: device.id.toString() + cameraIdDifferentiator,
               name: device.name,
-              AccessoryClass: isCamera ? Camera : getAccessoryClass(device)
+              AccessoryClass:
+                device instanceof RingCamera
+                  ? Camera
+                  : getAccessoryClass(device)
             }
           })
 
@@ -173,7 +185,7 @@ export class RingPlatform {
         }
 
         this.log.info(
-          `Configuring ${cameras.length} cameras and ${hapDevices.length} devices for location "${location.locationDetails.name}" - locationId: ${location.locationId}`
+          `Configuring ${cameras.length} cameras and ${hapDevices.length} devices for location "${location.name}" - locationId: ${location.id}`
         )
         hapDevices.forEach(({ device, isCamera, id, name, AccessoryClass }) => {
           const uuid = hap.UUIDGen.generate(debugPrefix + id),
