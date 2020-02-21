@@ -40,7 +40,7 @@ export interface FfmpegOptions {
 
 export class SipSession {
   private hasStarted = false
-  private hasCallEnded = false
+  hasCallEnded = false
   private onAudioPacket = new Subject<RtpPacket>()
   private onVideoPacket = new Subject<RtpPacket>()
   private onCallEndedSubject = new ReplaySubject(1)

@@ -2,9 +2,9 @@
 import {promisify} from "util";
 
 const TelegramBot = require('node-telegram-bot-api'),
-express = require('express');
+  express = require('express');
 import 'dotenv/config'
-import {RingApi, RingCamera} from '../api'
+import {RingApi, RingCamera, SipSession} from '../api'
 import fs from 'promise-fs'
 import * as path from 'path';
 
@@ -21,6 +21,7 @@ const {env} = process,
   // openHabVideoUrl: string = env.OPENHAB_VIDEO_URL as string,
   videoLength: number = parseInt(env.VIDEO_LENGTH as string) || 4,
   sendSnapshotForMotion = !!env.SEND_SNAPSHOT_MOTION,
+  watchDings: boolean = env.WATCH_DINGS !== 'FALSE',
   maxSnapshots = parseInt(env.MAX_SNAPSHOTS as string) || 3,
   snapshotInterval = (parseInt(env.SNAPSHOT_INTERVAL as string) * 1000) || 30000,
   telegramToken = env.TELEGRAM_TOKEN as string,
@@ -114,73 +115,12 @@ async function sendVideo(camera: RingCamera) {
 //   }, snapshotInterval);
 // }
 
-async function main() {
-  const ringApi = new RingApi({
-      // Replace with your ring email/password
-      email: env.RING_EMAIL!,
-      password: env.RING_PASS!,
-      // Refresh token is used when 2fa is on
-      refreshToken: process.env.RING_TOKEN!,
-      // Listen for dings and motion events
-      cameraDingsPollingSeconds: 2
-      // externalPorts: {
-      //   start: 15000,
-      //   end: 15050,
-      // }
-    }),
-    [camera] = await ringApi.getCameras();
+let sipSession: SipSession;
 
-  if (camera) {
-    // await sendVideo(camera);
-    (camera as any).snapshotLifeTime = 10000;
-    camera.onNewDing.subscribe(async ding => {
-      if (processing) {
-        return;
-      }
-      const event =
-        ding.kind === 'motion'
-          ? 'Motion detected'
-          : ding.kind === 'ding'
-          ? 'Doorbell pressed'
-          : `Video started (${ding.kind})`;
-      console.log(`${event} on ${camera.name} camera. Ding id ${ding.id_str}.  Received at ${new Date()}`);
-      processing = true;
-      try {
-        if (ding.kind === 'ding') {
-          await Promise.all([updateOpenHab(openHabRingUrl, 'ON', 'Ring'), sendVideo(camera)].map(p => p.catch(e => e)))
-            .then(results => console.log(results));
-        } else if (ding.kind === 'motion') {
-          await updateOpenHab(openHabMotionUrl, 'ON', 'Motion');
-          if (sendSnapshotForMotion) {
-            await sendVideo(camera);
-          }
-        }
-      } catch (error) {
-        console.log('Error handling event', error);
-      } finally {
-        processing = false;
-      }
-    });
-
-    console.log('Listening for motion and doorbell presses on your cameras.')
-  }
-
-  const app = express(),
-    publicOutputDirectory = path.join('public', 'output');
-
-  if (!(await promisify(fs.exists)(publicOutputDirectory))) {
-    await fs.mkdir(publicOutputDirectory, {recursive: true})
-  }
-
-  app.use('/send-video', async (req: any, res: any) => {
-    await sendVideo(camera);
-    res.status(200).send('send video to telegram');
-  });
-
-  app.use('/', express.static('public'))
-
-  app.use('/get-video', async (req: any, res: any) => {
-    const sipSession = await camera.streamVideo({
+async function startStream(camera: RingCamera, publicOutputDirectory: string){
+  if(!sipSession || sipSession.hasCallEnded){
+    console.log('Starting stream');
+    sipSession = await camera.streamVideo({
       output: [
         '-preset',
         'veryfast',
@@ -207,7 +147,82 @@ async function main() {
     sipSession.onCallEnded.subscribe(() => {
       console.log('Call has ended');
     });
+  }
+  return sipSession;
+}
 
+async function main() {
+  const ringApi = new RingApi({
+      // Replace with your ring email/password
+      email: env.RING_EMAIL!,
+      password: env.RING_PASS!,
+      // Refresh token is used when 2fa is on
+      refreshToken: process.env.RING_TOKEN!,
+      // Listen for dings and motion events
+      cameraDingsPollingSeconds: 2
+      // externalPorts: {
+      //   start: 15000,
+      //   end: 15050,
+      // }
+    }),
+    [camera] = await ringApi.getCameras();
+
+  if (camera && watchDings) {
+    // await sendVideo(camera);
+    (camera as any).snapshotLifeTime = 10000;
+    camera.onNewDing.subscribe(async ding => {
+      if (processing) {
+        return;
+      }
+      const event =
+        ding.kind === 'motion'
+          ? 'Motion detected'
+          : ding.kind === 'ding'
+          ? 'Doorbell pressed'
+          : `Video started (${ding.kind})`;
+      console.log(`${event} on ${camera.name} camera. Ding id ${ding.id_str}.  Received at ${new Date()}`);
+      processing = true;
+      try {
+        if (ding.kind === 'ding') {
+          const updateOpenHabPromise = openHabRingUrl && openHabRingUrl.startsWith('http') ? updateOpenHab(openHabRingUrl, 'ON', 'Ring') : Promise.resolve();
+          await Promise.all([updateOpenHabPromise, sendVideo(camera)].map(p => p.catch(e => e)))
+            .then(results => console.log(results));
+        } else if (ding.kind === 'motion') {
+          if (openHabMotionUrl && openHabMotionUrl.startsWith('http')) {
+            await updateOpenHab(openHabMotionUrl, 'ON', 'Motion');
+          }
+          if (sendSnapshotForMotion) {
+            await sendVideo(camera);
+          }
+        }
+      } catch (error) {
+        console.log('Error handling event', error);
+      } finally {
+        processing = false;
+      }
+    });
+
+    console.log('Listening for motion and doorbell presses on your cameras.')
+  } else {
+    console.log('Not watching for dings, watch dings: ' + watchDings);
+  }
+
+  const app = express(),
+    publicOutputDirectory = path.join('public', 'output');
+
+  if (!(await promisify(fs.exists)(publicOutputDirectory))) {
+    await fs.mkdir(publicOutputDirectory, {recursive: true})
+  }
+
+  app.use('/send-video', async (req: any, res: any) => {
+    await sendVideo(camera);
+    res.status(200).send('send video to telegram');
+  });
+
+  app.use('/', express.static('public'));
+
+  app.use('/get-video', async (req: any, res: any) => {
+    startStream(camera, publicOutputDirectory);
     res.sendfile('public/index.html');
   });
 
