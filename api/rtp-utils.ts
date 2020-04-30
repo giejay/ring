@@ -11,12 +11,20 @@ import { logError } from './util'
 const stun = require('stun'),
   portControl = require('nat-puncher')
 
-let preferredExternalPorts: number[] | undefined
+let preferredExternalPorts: number[] | undefined, ffmpegPath: string | undefined
 
 export function setPreferredExternalPorts(start: number, end: number) {
   const count = end - start + 1
 
   preferredExternalPorts = Array.from(new Array(count)).map((_, i) => i + start)
+}
+
+export function setFfmpegPath(path: string) {
+  ffmpegPath = path
+}
+
+export function getFfmpegPath() {
+  return ffmpegPath || 'ffmpeg'
 }
 
 export interface SrtpOptions {
@@ -49,7 +57,7 @@ export function getPublicIp() {
 
 let reservedPorts: number[] = []
 export function releasePorts(ports: number[]) {
-  reservedPorts = reservedPorts.filter(p => !ports.includes(p))
+  reservedPorts = reservedPorts.filter((p) => !ports.includes(p))
 }
 
 // Need to reserve ports in sequence because ffmpeg uses the next port up by default.  If it's taken, ffmpeg will error
@@ -57,7 +65,7 @@ export function releasePorts(ports: number[]) {
 export async function reservePorts({
   count = 1,
   forExternalUse = false,
-  attemptedPorts = []
+  attemptedPorts = [],
 }: {
   count?: number
   forExternalUse?: boolean
@@ -65,7 +73,7 @@ export async function reservePorts({
 } = {}): Promise<number[]> {
   const availablePorts =
       forExternalUse && preferredExternalPorts
-        ? preferredExternalPorts.filter(p => !reservedPorts.includes(p))
+        ? preferredExternalPorts.filter((p) => !reservedPorts.includes(p))
         : undefined,
     port = await getPort({ port: availablePorts }),
     ports = [port],
@@ -73,7 +81,7 @@ export async function reservePorts({
       return reservePorts({
         count,
         forExternalUse,
-        attemptedPorts: attemptedPorts.concat(ports)
+        attemptedPorts: attemptedPorts.concat(ports),
       })
     }
 
@@ -100,7 +108,7 @@ export async function reservePorts({
     ports.push(openPort)
   }
 
-  if (ports.some(p => reservedPorts.includes(p))) {
+  if (ports.some((p) => reservedPorts.includes(p))) {
     return tryAgain()
   }
 
@@ -177,7 +185,7 @@ export async function bindProxyPorts(
     rtpStream =
       type === 'audio' ? sipSession.audioStream : sipSession.videoStream,
     subscriptions = [
-      sipSession.onRemoteRtpOptions.subscribe(rtpOptions => {
+      sipSession.onRemoteRtpOptions.subscribe((rtpOptions) => {
         ringRtpOptions = rtpOptions
       }),
       rtpStream.onRtpPacket.subscribe(({ message }) => {
@@ -186,13 +194,13 @@ export async function bindProxyPorts(
       rtpStream.onRtpPacket
         .pipe(
           map(({ message }) => getSsrc(message)),
-          filter(x => x !== null),
+          filter((x) => x !== null),
           take(1)
         )
-        .subscribe(ssrc => ssrc && onSsrc.next(ssrc))
+        .subscribe((ssrc) => ssrc && onSsrc.next(ssrc)),
     ]
 
-  socket.on('message', message => {
+  socket.on('message', (message) => {
     if (ringRtpOptions) {
       rtpStream.socket.send(
         message,
@@ -207,16 +215,16 @@ export async function bindProxyPorts(
 
   sipSession.onCallEnded.subscribe(() => {
     socket.close()
-    subscriptions.forEach(subscription => subscription.unsubscribe())
+    subscriptions.forEach((subscription) => subscription.unsubscribe())
   })
 
   return {
     ssrcPromise: onSsrc.pipe(take(1)).toPromise(),
-    localPort
+    localPort,
   }
 }
 
 export async function doesFfmpegSupportCodec(codec: string) {
-  const output = await execa('ffmpeg', ['-codecs'])
+  const output = await execa(getFfmpegPath(), ['-codecs'])
   return output.stdout.includes(codec)
 }

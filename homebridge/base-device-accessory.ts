@@ -1,7 +1,7 @@
 import { RingDevice, RingDeviceData } from '../api'
 import { HAP, hap } from './hap'
 import { RingPlatformConfig } from './config'
-import { BaseAccessory } from './base-accessory'
+import { BaseDataAccessory } from './base-data-accessory'
 
 function getBatteryLevel({ batteryLevel, batteryStatus }: RingDeviceData) {
   if (batteryLevel !== undefined) {
@@ -26,7 +26,7 @@ function getStatusLowBattery(data: RingDeviceData) {
 function getBatteryChargingState({
   batteryStatus,
   batteryBackup,
-  acStatus
+  acStatus,
 }: RingDeviceData) {
   const { ChargingState } = hap.Characteristic
 
@@ -51,7 +51,9 @@ function hasBatteryStatus({ batteryStatus }: RingDeviceData) {
   return batteryStatus !== 'none'
 }
 
-export abstract class BaseDeviceAccessory extends BaseAccessory<RingDevice> {
+export abstract class BaseDeviceAccessory extends BaseDataAccessory<
+  RingDevice
+> {
   abstract readonly device: RingDevice
   abstract readonly accessory: HAP.Accessory
   abstract readonly logger: HAP.Log
@@ -60,24 +62,24 @@ export abstract class BaseDeviceAccessory extends BaseAccessory<RingDevice> {
   initBase() {
     const {
         device: { data: initialData },
-        device
+        device,
       } = this,
       { Characteristic, Service } = hap
 
     this.registerCharacteristic(
       Characteristic.Manufacturer,
       Service.AccessoryInformation,
-      data => data.manufacturerName || 'Ring'
+      (data) => data.manufacturerName || 'Ring'
     )
     this.registerCharacteristic(
       Characteristic.Model,
       Service.AccessoryInformation,
-      data => data.deviceType
+      (data) => data.deviceType
     )
     this.registerCharacteristic(
       Characteristic.SerialNumber,
       Service.AccessoryInformation,
-      data => data.serialNumber || 'Unknown'
+      (data) => data.serialNumber || 'Unknown'
     )
 
     if ('volume' in initialData && 'setVolume' in device) {
@@ -89,7 +91,7 @@ export abstract class BaseDeviceAccessory extends BaseAccessory<RingDevice> {
       this.registerLevelCharacteristic(
         Characteristic.Volume,
         Service.Speaker,
-        data => {
+        (data) => {
           return data.volume ? data.volume * 100 : 0
         },
         (volume: number) => {
@@ -125,7 +127,7 @@ export abstract class BaseDeviceAccessory extends BaseAccessory<RingDevice> {
     this.registerCharacteristic(
       Characteristic.StatusTampered,
       SensorService,
-      data => {
+      (data) => {
         return data.tamperStatus === 'ok'
           ? Characteristic.StatusTampered.NOT_TAMPERED
           : Characteristic.StatusTampered.TAMPERED
@@ -136,7 +138,7 @@ export abstract class BaseDeviceAccessory extends BaseAccessory<RingDevice> {
       this.registerCharacteristic(
         Characteristic.StatusLowBattery,
         SensorService,
-        data => getStatusLowBattery(data)
+        (data) => getStatusLowBattery(data)
       )
     }
   }

@@ -10,12 +10,9 @@ import { cleanOutputDirectory, outputDirectory } from './util'
 
 async function example() {
   const ringApi = new RingApi({
-      // Replace with your ring email/password
-      email: process.env.RING_EMAIL!,
-      password: process.env.RING_PASS!,
-      // Refresh token is used when 2fa is on
+      // Replace with your refresh token
       refreshToken: process.env.RING_REFRESH_TOKEN!,
-      debug: true
+      debug: true,
     }),
     [camera] = await ringApi.getCameras()
 
@@ -41,8 +38,8 @@ async function example() {
       'movflags=+faststart',
       '-reset_timestamps',
       '1',
-      path.join(outputDirectory, 'part%d.mp4')
-    ]
+      path.join(outputDirectory, 'part%d.mp4'),
+    ],
   })
   console.log('Video started, streaming to part files...')
 
@@ -51,7 +48,7 @@ async function example() {
     process.exit()
   })
 
-  setTimeout(function() {
+  setTimeout(function () {
     console.log('Stopping call...')
     sipSession.stop()
   }, 60 * 1000) // Stop after 1 minute

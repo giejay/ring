@@ -1,17 +1,17 @@
 import { RingDevice, RingDeviceData, AlarmState } from '../api'
 import { HAP, hap } from './hap'
 import { RingPlatformConfig } from './config'
-import { BaseAccessory } from './base-accessory'
+import { BaseDataAccessory } from './base-data-accessory'
 
 const burglarStates: AlarmState[] = [
     'burglar-alarm',
     'user-verified-burglar-alarm',
-    'burglar-accelerated-alarm'
+    'burglar-accelerated-alarm',
   ],
   fireStates: AlarmState[] = [
     'fire-alarm',
     'user-verified-co-or-fire-alarm',
-    'fire-accelerated-alarm'
+    'fire-accelerated-alarm',
   ]
 
 function matchesAnyAlarmState(
@@ -21,7 +21,7 @@ function matchesAnyAlarmState(
   return Boolean(alarmInfo && targetStates.includes(alarmInfo.state))
 }
 
-export class PanicButtons extends BaseAccessory<RingDevice> {
+export class PanicButtons extends BaseDataAccessory<RingDevice> {
   constructor(
     public readonly device: RingDevice,
     public readonly accessory: HAP.Accessory,
@@ -36,8 +36,8 @@ export class PanicButtons extends BaseAccessory<RingDevice> {
     this.registerCharacteristic(
       Characteristic.On,
       this.getService(Service.Switch, 'Burglar Alarm', 'Burglar'),
-      data => matchesAnyAlarmState(data, burglarStates),
-      on => {
+      (data) => matchesAnyAlarmState(data, burglarStates),
+      (on) => {
         if (on) {
           this.logger.info(`Burglar Alarm activated for ${locationName}`)
           return this.device.location.triggerBurglarAlarm()
@@ -51,8 +51,8 @@ export class PanicButtons extends BaseAccessory<RingDevice> {
     this.registerCharacteristic(
       Characteristic.On,
       this.getService(Service.Switch, 'Fire Alarm', 'Fire'),
-      data => matchesAnyAlarmState(data, fireStates),
-      on => {
+      (data) => matchesAnyAlarmState(data, fireStates),
+      (on) => {
         if (on) {
           this.logger.info(`Fire Alarm activated for ${locationName}`)
           return this.device.location.triggerFireAlarm()
@@ -70,7 +70,7 @@ export class PanicButtons extends BaseAccessory<RingDevice> {
     this.registerCharacteristic(
       Characteristic.Manufacturer,
       Service.AccessoryInformation,
-      data => data.manufacturerName || 'Ring'
+      (data) => data.manufacturerName || 'Ring'
     )
     this.registerCharacteristic(
       Characteristic.Model,

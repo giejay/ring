@@ -1,9 +1,14 @@
+<p align="center">
+  <a href="https://github.com/homebridge/verified/blob/master/verified-plugins.json"><img alt="Homebridge Verified" src="https://raw.githubusercontent.com/dgreif/ring/master/branding/Homebridge_x_Ring.svg?sanitize=true" width="500px"></a>
+</p>
+
 # homebridge-ring
 
-[![npm](https://img.shields.io/npm/v/homebridge-ring.svg)](https://www.npmjs.com/package/homebridge-ring)
-[![npm](https://img.shields.io/npm/dt/homebridge-ring.svg)](https://www.npmjs.com/package/homebridge-ring)
+[![npm](https://badgen.net/npm/v/homebridge-ring)](https://www.npmjs.com/package/homebridge-ring)
+[![npm](https://badgen.net/npm/dt/homebridge-ring)](https://www.npmjs.com/package/homebridge-ring)
 [![GitHub Workflow Status](https://img.shields.io/github/workflow/status/dgreif/ring/Node-CI.svg)](https://github.com/dgreif/ring/actions)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=HD9ZPB34FY428&currency_code=USD&source=url)
+[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
+[![Donate](https://badgen.net/badge/Donate/PayPal/91BE09)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=HD9ZPB34FY428&currency_code=USD&source=url)
 
 This [Homebridge](https://github.com/nfarina/homebridge) plugin provides a platform for
 [Ring Doorbells](https://shop.ring.com/pages/doorbell-cameras),
@@ -11,7 +16,6 @@ This [Homebridge](https://github.com/nfarina/homebridge) plugin provides a platf
 the [Ring Alarm System](https://shop.ring.com/pages/security-system),
 [Ring Smart Lighting](https://shop.ring.com/pages/smart-lighting),
 and third party devices that connect to the Ring Alarm System.
-
 
 ## Installation
 
@@ -29,30 +33,14 @@ For the best experience setting up this plugin, please use [homebridge-config-ui
 
 ### Basic Configuration
 
-If you _do not have_ 2fa enabled, this is all that you need to get up and running.  It will enable all devices from Ring and no other configuration is required.  [See below](https://github.com/dgreif/ring/tree/master/homebridge#camera-setup) for instructions to add cameras to HomeKit.
+First, generate a `refreshToken` using the instructions in the [Refresh Tokens Wiki](https://github.com/dgreif/ring/wiki/Refresh-Tokens)
 
  ```json
 {
   "platforms": [
     {
       "platform": "Ring",
-      "email": "some.one@website.com",
-      "password": "abc123!#"
-    }
-  ]
-}
-```
-
-### Alternate Basic Config (2fa)
-
-If you _have_ 2fa enable, you _must_ use a `refreshToken` instead of email/password.  It also works without 2fa if you simply don't want your email/password in your homebridge `config.json`.  See the [Two Factor Auth Wiki](https://github.com/dgreif/ring/wiki/Two-Factor-Auth) for details on generating a `refreshToken`.
-
- ```json
-{
-  "platforms": [
-    {
-      "platform": "Ring",
-      "refreshToken": "token generated with ring-auth-cli"
+      "refreshToken": "token generated with ring-auth-cli.  See https://github.com/dgreif/ring/wiki/Refresh-Tokens"
     }
   ]
 }
@@ -63,9 +51,6 @@ Only include an optional parameter if you actually need it.  Default behavior wi
 
  ```json
 {
-  "email": "some.one@website.com",
-  "password": "abc123!#",
-
   "alarmOnEntryDelay": true,
   "beamDurationSeconds": 60,
   "hideLightGroups": true,
@@ -77,6 +62,7 @@ Only include an optional parameter if you actually need it.  Default behavior wi
   "hideUnsupportedServices": true,
   "cameraStatusPollingSeconds": 20,
   "cameraDingsPollingSeconds": 2,
+  "locationModePollingSeconds": 20,
   "locationIds": ["488e4800-fcde-4493-969b-d1a06f683102", "4bbed7a7-06df-4f18-b3af-291c89854d60"]
 }
 ```
@@ -95,7 +81,9 @@ Option | Default | Explanation
 `showPanicButtons` | `false` | Creates a new `Panic Buttons` device in HomeKit with `Burglar Alarm` and `Fire Alarm` switches.  **Use these at your own risk.  I do not guarantee functionality in case of emergency, nor do I take responsibility for any false alarms**.  These function just like the SOS sliders in the Ring app.
 `cameraStatusPollingSeconds` | `20` | How frequently to poll for updates to your cameras.  Information like light/siren status do not update in real time and need to be requested periodically.
 `cameraDingsPollingSeconds` | `2` | How frequently to poll for new events from your cameras.  These include motion and doorbell presses.
+`locationModePollingSeconds` | `20` | How frequently to poll for location mode updates (in seconds).  This is only useful if you are using location modes to control camera settings and want to keep an up-to-date reference of the current mode for each location.  Polling is automatically disabled for locations equipped with a Ring Alarm.
 `locationIds` | All Locations | Use this option if you only want a subset of your locations to appear in HomeKit. If this option is not included, all of your locations will be added to HomeKit (which is what most users will want to do).
+`ffmpegPath` | Uses ffmpeg-for-homebridge | A custom path to the `ffmpeg` executable.  By default, the static binaries built in [ffmpeg-for-homebridge](https://github.com/oznu/ffmpeg-for-homebridg) will be used.  If you prefer to use your own version of ffmpeg, you can pass a complete path, or simply `"ffmpeg"` to use ffmpeg from your `PATH`.
 `debug` | false | Turns on additional logging.  In particular, ffmpeg logging.
 
 ### Camera Setup
@@ -190,8 +178,11 @@ If you are having issues with your cameras in the Home app, please see the [Came
     * Creates `Burglar Alarm` and `Fire Alarm` switches in a new `Panic Buttons` device in HomeKit
     * Use these at your own risk.  **I do not guarantee functionality in case of emergency, nor do I take responsibility for any false alarms**
     * If either switch is turned on, you will receive a call from Ring monitoring to verify the emergency, and then authorities will be dispatched
+  * Location Modes
+    * For homes not equipped with a Ring Alarm, Locations Modes can be used as an alternative way to change settings for Ring cameras.
+    * Shows as a security system in HomeKit, just like the Ring Alarm.
 
-### Alarm Modes
+### Alarm/Location Modes
 
 Ring Mode | HomeKit Mode
 --- | ---
@@ -206,7 +197,7 @@ These settings will automatically be used by HomeKit.
 **Note**: Using `Night` mode in HomeKit will activate `Home` mode on the Ring alarm.
 HomeKit should immediately switch to `Home` to match.
 
-### Siri Commands for Alarm
+### Siri Commands for Alarm/Location Modes
 
 Siri Command | Outcome
 --- | ---

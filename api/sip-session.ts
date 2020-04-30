@@ -5,15 +5,16 @@ import {
   Observable,
   ReplaySubject,
   Subject,
-  Subscription
+  Subscription,
 } from 'rxjs'
 import {
   bindProxyPorts,
+  getFfmpegPath,
   getSrtpValue,
   releasePorts,
   reservePorts,
   RtpOptions,
-  sendUdpHolePunch
+  sendUdpHolePunch,
 } from './rtp-utils'
 import { spawn } from 'child_process'
 import { expiredDingError, SipCall, SipOptions } from './sip-call'
@@ -50,7 +51,7 @@ export class SipSession {
   reservedPorts = [
     this.tlsPort,
     this.rtpOptions.video.port,
-    this.rtpOptions.audio.port
+    this.rtpOptions.audio.port,
   ]
   onCallEnded = this.onCallEndedSubject.asObservable()
   onRemoteRtpOptions = this.onRemoteRtpOptionsSubject.asObservable()
@@ -58,12 +59,12 @@ export class SipSession {
   audioStream: RtpStream = {
     socket: this.audioSocket,
     port: this.rtpOptions.audio.port,
-    onRtpPacket: this.onAudioPacket.asObservable()
+    onRtpPacket: this.onAudioPacket.asObservable(),
   }
   videoStream: RtpStream = {
     socket: this.videoSocket,
     port: this.rtpOptions.video.port,
-    onRtpPacket: this.onVideoPacket.asObservable()
+    onRtpPacket: this.onVideoPacket.asObservable(),
   }
 
   constructor(
@@ -167,7 +168,7 @@ export class SipSession {
     const transcodeVideoStream = ffmpegOptions.video !== false,
       [audioPort, videoPort] = [
         await this.reservePort(1),
-        await this.reservePort(1)
+        await this.reservePort(1),
       ],
       input = this.sipCall.sdp
         .replace(
@@ -199,18 +200,18 @@ export class SipSession {
         ...(transcodeVideoStream
           ? ffmpegOptions.video || ['-vcodec', 'copy']
           : []),
-        ...(ffmpegOptions.output || [])
+        ...(ffmpegOptions.output || []),
       ],
       ff = spawn(
-        'ffmpeg',
-        ffOptions.map(x => x.toString())
+        getFfmpegPath(),
+        ffOptions.map((x) => x.toString())
       )
 
     ff.stderr.on('data', (data: any) => {
       logDebug(`ffmpeg stderr: ${data}`)
     })
 
-    ff.on('close', code => {
+    ff.on('close', (code) => {
       this.callEnded(true)
       logDebug(`ffmpeg exited with code ${code}`)
     })
@@ -232,7 +233,7 @@ export class SipSession {
     ff.stdin.end()
 
     const proxyPromises = [
-      bindProxyPorts(audioPort, '127.0.0.1', 'audio', this)
+      bindProxyPorts(audioPort, '127.0.0.1', 'audio', this),
     ]
 
     if (transcodeVideoStream) {
@@ -263,7 +264,7 @@ export class SipSession {
     this.sipCall.destroy()
     this.videoSocket.close()
     this.audioSocket.close()
-    this.subscriptions.forEach(subscription => subscription.unsubscribe())
+    this.subscriptions.forEach((subscription) => subscription.unsubscribe())
     releasePorts(this.reservedPorts)
   }
 

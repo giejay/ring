@@ -1,9 +1,9 @@
 # ring-client-api
 
-[![npm](https://img.shields.io/npm/v/ring-client-api.svg)](https://www.npmjs.com/package/ring-client-api)
-[![npm](https://img.shields.io/npm/dt/ring-client-api.svg)](https://www.npmjs.com/package/ring-client-api)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/dgreif/ring/Node-CI.svg)](https://github.com/dgreif/ring/actions)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=HD9ZPB34FY428&currency_code=USD&source=url)
+[![mit license](https://badgen.net/badge/license/MIT/red)](https://github.com/dgreif/ring/blob/master/LICENSE)
+[![npm](https://badgen.net/npm/v/ring-client-api)](https://www.npmjs.com/package/ring-client-api)
+[![npm](https://badgen.net/npm/dt/ring-client-api)](https://www.npmjs.com/package/ring-client-api)
+[![Donate](https://badgen.net/badge/Donate/PayPal/91BE09)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=HD9ZPB34FY428&currency_code=USD&source=url)
 
 This is an unofficial TypeScript api for [Ring Doorbells](https://shop.ring.com/pages/doorbell-cameras),
 [Ring Cameras](https://shop.ring.com/pages/security-cameras),
@@ -16,18 +16,15 @@ Built to support the [homebridge-ring Plugin](./homebridge)
 
 `npm i ring-client-api`
 
-
 ## Setup and Config
+
+First, generate a `refreshToken` using the instructions in the [Refresh Tokens Wiki](https://github.com/dgreif/ring/wiki/Refresh-Tokens)
+
 ```js
 import { RingApi } from 'ring-client-api'
 
 const ringApi = new RingApi({
-  // without 2fa
-  email: 'some.one@website.com',
-  password: 'abc123!#',
-
-  // with 2fa or if you dont want to store your email/password in your config
-  refreshToken: 'token generated with ring-auth-cli.  See https://github.com/dgreif/ring/wiki/Two-Factor-Auth',
+  refreshToken: 'token generated with ring-auth-cli.  See https://github.com/dgreif/ring/wiki/Refresh-Tokens',
 
   // The following are all optional. See below for details
   cameraStatusPollingSeconds: 20,
@@ -36,17 +33,17 @@ const ringApi = new RingApi({
 });
 ```
 
-For accounts with 2fa enabled, see the [Two Factor Auth Wiki](https://github.com/dgreif/ring/wiki/Two-Factor-Auth)
-
 ### Optional Parameters
 
 Option | Default | Explanation
 --- | --- | ---
-`refreshToken` | `undefined` | An alternate authentication method for accounts with 2fa enabled, or if you don't want to store your email/password in a config file.  See the [Two Factor Auth Wiki](https://github.com/dgreif/ring/wiki/Two-Factor-Auth).
 `cameraStatusPollingSeconds` | `undefined` (No Polling) | How frequently to poll for updates to your cameras (in seconds).  Information like light/siren status do not update in real time and need to be requested periodically.
 `cameraDingsPollingSeconds` | `undefined` (No Polling) | How frequently to poll for new events from your cameras (in seconds).  These include motion and doorbell presses.  Without this option, cameras will not emit any information about motion and doorbell presses.
+`locationModePollingSeconds` | `undefined` (No Polling) | How frequently to poll for location mode updates (in seconds).  This is only useful if you are using location modes to control camera settings and want to keep an up-to-date reference of the current mode for each location.  Polling is automatically disabled for locations equipped with a Ring Alarm.
 `locationIds` | All Locations | Allows you to limit the results to a specific set of locations. This is mainly useful for the [homebridge-ring Plugin](./homebridge), but can also be used if you only care about listening for events at a subset of your locations and don't want to create websocket connections to _all_ of your locations. This will also limit the results for `ringApi.getCameras()` to the configured locations. If this option is not included, all locations will be returned.
 `debug` | false | Turns on additional logging.  In particular, ffmpeg logging.
+`ffmpegPath` | undefined | A custom path to the `ffmpeg` executable.  By default, `ffmpeg` will be found using the `PATH` environment variable.
+`controlCenterDisplayName` | 'ring-client-api' | This allows you to change the displayed name for the Authorized Device within Control Center in the Ring app
 
 ## Locations
 ```typescript
@@ -118,6 +115,10 @@ Some other useful propeties
 * `isDoorbot`: is this camera a doorbell
 
 See the `examples` directory for additional code examples.
+
+## Refresh Token
+
+Ring has restricted refresh tokens so that they expire shortly after use.  See https://github.com/dgreif/ring/wiki/Refresh-Tokens#refresh-token-expiration for details on how to properly handle refresh tokens in your library.
 
 ## homebridge-ring
 

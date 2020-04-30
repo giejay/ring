@@ -25,7 +25,7 @@ export enum RingDeviceType {
   BeamsLightGroupSwitch = 'group.light-group.beams',
   BeamsTransformerSwitch = 'switch.transformer.beams',
   RetrofitBridge = 'bridge.flatline',
-  RetrofitZone = 'sensor.zone'
+  RetrofitZone = 'sensor.zone',
 }
 
 export enum RingDeviceCategory {
@@ -45,7 +45,7 @@ export enum RingDeviceCategory {
   RangeExtenders = 32,
   Keypads = 33,
   Sirens = 34,
-  PanicButtons = 35
+  PanicButtons = 35,
 }
 
 export enum RingCameraKind {
@@ -69,8 +69,9 @@ export enum RingCameraKind {
   hp_cam_v1 = 'hp_cam_v1',
   hp_cam_v2 = 'hp_cam_v2',
   floodlight_v1 = 'floodlight_v1',
-  floodlight_v2 = 'floodlight_v2'
+  floodlight_v2 = 'floodlight_v2',
 }
+
 export const batteryCameraKinds: RingCameraKind[] = [
   RingCameraKind.doorbot,
   RingCameraKind.doorbell,
@@ -81,7 +82,7 @@ export const batteryCameraKinds: RingCameraKind[] = [
   RingCameraKind.stickup_cam,
   RingCameraKind.stickup_cam_v3,
   RingCameraKind.stickup_cam_v4,
-  RingCameraKind.stickup_cam_lunar
+  RingCameraKind.stickup_cam_lunar,
 ]
 
 export const RingCameraModel: { readonly [P in RingCameraKind]: string } = {
@@ -105,7 +106,7 @@ export const RingCameraModel: { readonly [P in RingCameraKind]: string } = {
   hp_cam_v2: 'Spotlight Cam',
   stickup_cam_v4: 'Spotlight Cam',
   floodlight_v1: 'Floodlight Cam',
-  floodlight_v2: 'Floodlight Cam'
+  floodlight_v2: 'Floodlight Cam',
 }
 
 export type AlarmMode = 'all' | 'some' | 'none'
@@ -158,7 +159,7 @@ export const allAlarmStates: AlarmState[] = [
   'user-verified-burglar-alarm',
   'user-verified-co-or-fire-alarm',
   'burglar-accelerated-alarm',
-  'fire-accelerated-alarm'
+  'fire-accelerated-alarm',
 ]
 
 export interface RingDeviceData {
@@ -217,7 +218,7 @@ export interface RingDeviceData {
 
 export const deviceTypesWithVolume = [
   RingDeviceType.BaseStation,
-  RingDeviceType.Keypad
+  RingDeviceType.Keypad,
 ]
 
 export interface BaseStation {
@@ -291,7 +292,7 @@ export interface TicketAsset {
 export enum DoorbellType {
   Mechanical = 0,
   Digital = 1,
-  None = 2
+  None = 2,
 }
 
 export interface CameraData {
@@ -425,6 +426,7 @@ export interface CameraEvent {
   recording_status: 'ready' | 'audio_ready'
   state: 'timed_out' | 'completed'
 }
+
 // timed_out + ding === Missed Ring
 // completed === Answered
 
@@ -537,5 +539,48 @@ export interface AccountMonitoringStatus {
 
 export enum DispatchSignalType {
   Burglar = 'user-verified-burglar-xa',
-  Fire = 'user-verified-fire-xa'
+  Fire = 'user-verified-fire-xa',
+}
+
+export type LocationModeInput = 'home' | 'away' | 'disarmed'
+export type LocationMode = LocationModeInput | 'disabled' | 'unset'
+export const disabledLocationModes: LocationMode[] = ['disabled', 'unset']
+
+export interface LocationModeResponse {
+  mode: LocationMode
+  lastUpdateTimeMS: number
+  securityStatus: {
+    lu?: number
+    md: 'none' | string
+    returnTopic: string
+  }
+  readOnly: boolean
+  notYetParticipatingInMode?: []
+}
+
+export type LocationModeAction =
+  | 'disableMotionDetection'
+  | 'enableMotionDetection'
+  | 'blockLiveViewLocally'
+  | 'allowLiveViewLocally'
+
+export interface LocationModeSetting {
+  deviceId: string
+  deviceIdType: 'doorbot' | string
+  actions: LocationModeAction[]
+}
+
+export interface LocationModeSettings {
+  disarmed: LocationModeSetting[]
+  home: LocationModeSetting[]
+  away: LocationModeSetting[]
+}
+
+export interface LocationModeSettingsResponse extends LocationModeSettings {
+  lastUpdateTimeMS: number
+}
+
+export interface LocationModeSharing {
+  sharedUsersEnabled: boolean
+  lastUpdateTimeMS: number
 }

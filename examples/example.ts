@@ -1,14 +1,14 @@
 import 'dotenv/config'
-import {RingApi} from '../api'
-import {skip} from 'rxjs/operators'
+import { RingApi } from '../api'
+import { skip } from 'rxjs/operators'
+import { readFile, writeFile } from 'fs'
+import { promisify } from 'util'
 
 async function example() {
   const {env} = process,
     ringApi = new RingApi({
-      // Replace with your ring email/password
-      email: env.RING_EMAIL!,
-      password: env.RING_PASS!,
-      // Refresh token is used when 2fa is on
+      // Replace with your refresh token
+      refreshToken: env.RING_REFRESH_TOKEN!,
       // Listen for dings and motion events
       cameraDingsPollingSeconds: 2,
       debug: true
@@ -20,8 +20,27 @@ async function example() {
     `Found ${locations.length} location(s) with ${allCameras.length} camera(s).`
   )
 
+  ringApi.onRefreshTokenUpdated.subscribe(
+    async ({ newRefreshToken, oldRefreshToken }) => {
+      console.log('Refresh Token Updated: ', newRefreshToken)
+
+      // If you are implementing a project that use `ring-client-api`, you should subscribe to onRefreshTokenUpdated and update your config each time it fires an event
+      // Here is an example using a .env file for configuration
+      if (!oldRefreshToken) {
+        return
+      }
+
+      const currentConfig = await promisify(readFile)('.env'),
+        updatedConfig = currentConfig
+          .toString()
+          .replace(oldRefreshToken, newRefreshToken)
+
+      await promisify(writeFile)('.env', updatedConfig)
+    }
+  )
+
   for (const location of locations) {
-    location.onConnected.pipe(skip(1)).subscribe(connected => {
+    location.onConnected.pipe(skip(1)).subscribe((connected) => {
       const status = connected ? 'Connected to' : 'Disconnected from'
       console.log(`**** ${status} location ${location.name} - ${location.id}`)
     })
@@ -49,13 +68,8 @@ async function example() {
   }
 
   if (allCameras.length) {
-    const sn = await allCameras[0].getSnapshot();
-    console.log(sn);
-    allCameras.forEach(camera => {
-      camera.onData.subscribe(some => {
-        console.log(some);
-      })
-      camera.onNewDing.subscribe(ding => {
+    allCameras.forEach((camera) => {
+      camera.onNewDing.subscribe((ding) => {
         const event =
           ding.kind === 'motion'
             ? 'Motion detected'

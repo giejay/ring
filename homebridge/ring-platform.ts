@@ -4,7 +4,7 @@ import {
   RingCameraKind,
   RingDevice,
   RingDeviceCategory,
-  RingDeviceType
+  RingDeviceType,
 } from '../api'
 import { HAP, hap } from './hap'
 import { SecurityPanel } from './security-panel'
@@ -23,17 +23,18 @@ import { Fan } from './fan'
 import { Switch } from './switch'
 import { Camera } from './camera'
 import { PanicButtons } from './panic-buttons'
-import { RingAuth } from '../api/rest-client'
+import { RefreshTokenAuth } from '../api/rest-client'
 import { useLogger } from '../api/util'
 import { BaseAccessory } from './base-accessory'
 import { FloodFreezeSensor } from './flood-freeze-sensor'
 import { FreezeSensor } from './freeze-sensor'
 import { TemperatureSensor } from './temperature-sensor'
+import { LocationModeSwitch } from './location-mode-switch'
 
 const debug = __filename.includes('release-homebridge'),
   unsupportedDeviceTypes: (RingDeviceType | RingCameraKind)[] = [
     RingDeviceType.BaseStation,
-    RingDeviceType.Keypad
+    RingDeviceType.Keypad,
   ]
 
 export const platformName = 'Ring'
@@ -101,7 +102,7 @@ export class RingPlatform {
 
   constructor(
     public log: HAP.Log,
-    public config: RingPlatformConfig & RingAuth,
+    public config: RingPlatformConfig & RefreshTokenAuth,
     public api: HAP.Platform
   ) {
     useLogger({
@@ -110,7 +111,7 @@ export class RingPlatform {
       },
       logError(message) {
         log.error(message)
-      }
+      },
     })
 
     if (!config) {
@@ -118,12 +119,13 @@ export class RingPlatform {
       return
     }
 
-    config.cameraStatusPollingSeconds = config.cameraStatusPollingSeconds || 20
-    config.cameraDingsPollingSeconds = config.cameraDingsPollingSeconds || 2
+    config.cameraStatusPollingSeconds = config.cameraStatusPollingSeconds ?? 20
+    config.cameraDingsPollingSeconds = config.cameraDingsPollingSeconds ?? 2
+    config.locationModePollingSeconds = config.locationModePollingSeconds ?? 20
 
     this.api.on('didFinishLaunching', () => {
       this.log.debug('didFinishLaunching')
-      this.connectToApi().catch(e => {
+      this.connectToApi().catch((e) => {
         this.log.error('Error connecting to API')
         this.log.error(e)
       })
@@ -141,7 +143,11 @@ export class RingPlatform {
   }
 
   async connectToApi() {
-    const ringApi = new RingApi(this.config),
+    const ringApi = new RingApi({
+        controlCenterDisplayName: 'homebridge-ring',
+        ffmpegPath: require('ffmpeg-for-homebridge'),
+        ...this.config,
+      }),
       locations = await ringApi.getLocations(),
       { api } = this,
       cachedAccessoryIds = Object.keys(this.homebridgeAccessories),
@@ -150,94 +156,111 @@ export class RingPlatform {
       activeAccessoryIds: string[] = []
 
     await Promise.all(
-      locations.map(async location => {
+      locations.map(async (location) => {
         const devices = await location.getDevices(),
           cameras = location.cameras,
           allDevices = [...devices, ...cameras],
           securityPanel = devices.find(
-            x => x.deviceType === RingDeviceType.SecurityPanel
+            (x) => x.deviceType === RingDeviceType.SecurityPanel
           ),
           debugPrefix = debug ? 'TEST ' : '',
-          hapDevices = allDevices.map(device => {
+          hapDevices = allDevices.map((device) => {
             const isCamera = device instanceof RingCamera,
               cameraIdDifferentiator = isCamera ? 'camera' : '' // this forces bridged cameras from old version of the plugin to be seen as "stale"
 
             return {
-              device,
+              deviceType: device.deviceType as string,
+              device: device as any,
               isCamera,
               id: device.id.toString() + cameraIdDifferentiator,
               name: device.name,
-              AccessoryClass:
-                device instanceof RingCamera
-                  ? Camera
-                  : getAccessoryClass(device)
+              AccessoryClass: (device instanceof RingCamera
+                ? Camera
+                : getAccessoryClass(device)) as
+                | (new (...args: any[]) => BaseAccessory<any>)
+                | null,
             }
           })
 
         if (this.config.showPanicButtons && securityPanel) {
           hapDevices.push({
+            deviceType: securityPanel.deviceType,
             device: securityPanel,
             isCamera: false,
             id: securityPanel.id.toString() + 'panic',
             name: 'Panic Buttons',
-            AccessoryClass: PanicButtons
+            AccessoryClass: PanicButtons,
+          })
+        }
+
+        if (
+          this.config.locationModePollingSeconds &&
+          (await location.supportsLocationModeSwitching())
+        ) {
+          hapDevices.push({
+            deviceType: 'location.mode',
+            device: location,
+            isCamera: false,
+            id: location.id + 'mode',
+            name: location.name + ' Mode',
+            AccessoryClass: LocationModeSwitch,
           })
         }
 
         this.log.info(
           `Configuring ${cameras.length} cameras and ${hapDevices.length} devices for location "${location.name}" - locationId: ${location.id}`
         )
-        hapDevices.forEach(({ device, isCamera, id, name, AccessoryClass }) => {
-          const uuid = hap.UUIDGen.generate(debugPrefix + id),
-            displayName = debugPrefix + name
+        hapDevices.forEach(
+          ({ deviceType, device, isCamera, id, name, AccessoryClass }) => {
+            const uuid = hap.UUIDGen.generate(debugPrefix + id),
+              displayName = debugPrefix + name
 
-          if (
-            !AccessoryClass ||
-            (this.config.hideLightGroups &&
-              device.deviceType === RingDeviceType.BeamsLightGroupSwitch) ||
-            (this.config.hideUnsupportedServices &&
-              unsupportedDeviceTypes.includes(device.deviceType))
-          ) {
-            this.log.info(
-              `Hidden accessory ${device.deviceType} ${displayName}`
-            )
-            return
+            if (
+              !AccessoryClass ||
+              (this.config.hideLightGroups &&
+                deviceType === RingDeviceType.BeamsLightGroupSwitch) ||
+              (this.config.hideUnsupportedServices &&
+                unsupportedDeviceTypes.includes(deviceType as any))
+            ) {
+              this.log.info(`Hidden accessory ${deviceType} ${displayName}`)
+              return
+            }
+
+            const createHomebridgeAccessory = () => {
+                const accessory = new hap.PlatformAccessory(
+                  displayName,
+                  uuid,
+                  isCamera
+                    ? hap.AccessoryCategories.CAMERA
+                    : hap.AccessoryCategories.SECURITY_SYSTEM
+                )
+
+                this.log.info(
+                  `Adding new accessory ${deviceType} ${displayName}`
+                )
+
+                if (isCamera) {
+                  cameraAccessories.push(accessory)
+                } else {
+                  platformAccessories.push(accessory)
+                }
+
+                return accessory
+              },
+              homebridgeAccessory =
+                this.homebridgeAccessories[uuid] || createHomebridgeAccessory(),
+              accessory = new AccessoryClass(
+                device as any,
+                homebridgeAccessory,
+                this.log,
+                this.config
+              )
+            accessory.initBase()
+
+            this.homebridgeAccessories[uuid] = homebridgeAccessory
+            activeAccessoryIds.push(uuid)
           }
-
-          const createHomebridgeAccessory = () => {
-              const accessory = new hap.PlatformAccessory(
-                displayName,
-                uuid,
-                isCamera
-                  ? hap.AccessoryCategories.CAMERA
-                  : hap.AccessoryCategories.SECURITY_SYSTEM
-              )
-
-              this.log.info(
-                `Adding new accessory ${device.deviceType} ${displayName}`
-              )
-
-              if (isCamera) {
-                cameraAccessories.push(accessory)
-              } else {
-                platformAccessories.push(accessory)
-              }
-
-              return accessory
-            },
-            homebridgeAccessory =
-              this.homebridgeAccessories[uuid] || createHomebridgeAccessory(),
-            accessory = new AccessoryClass(
-              device as any,
-              homebridgeAccessory,
-              this.log,
-              this.config
-            )
-          accessory.initBase()
-
-          this.homebridgeAccessories[uuid] = homebridgeAccessory
-          activeAccessoryIds.push(uuid)
-        })
+        )
       })
     )
 
@@ -253,10 +276,10 @@ export class RingPlatform {
     }
 
     const staleAccessories = cachedAccessoryIds
-      .filter(cachedId => !activeAccessoryIds.includes(cachedId))
-      .map(id => this.homebridgeAccessories[id])
+      .filter((cachedId) => !activeAccessoryIds.includes(cachedId))
+      .map((id) => this.homebridgeAccessories[id])
 
-    staleAccessories.forEach(staleAccessory => {
+    staleAccessories.forEach((staleAccessory) => {
       this.log.info(
         `Removing stale cached accessory ${staleAccessory.UUID} ${staleAccessory.displayName}`
       )
@@ -276,7 +299,7 @@ export class RingPlatform {
           return
         }
 
-        updateHomebridgeConfig(this.api, config => {
+        updateHomebridgeConfig(this.api, (config) => {
           return config.replace(oldRefreshToken, newRefreshToken)
         })
       }

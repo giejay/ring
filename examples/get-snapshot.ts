@@ -89,12 +89,12 @@ async function sendVideo(camera: RingCamera) {
       filePath = path.join(openHabSnapshotFolder, fileName);
     console.log('Recording to file: ' + filePath);
     await camera.recordToFile(filePath, videoLength);
-    let symLink = path.join(openHabSnapshotFolder, 'front-door-latest.mp4');
-    console.log('Creating symlink: ' + symLink);
-    if (fs.existsSync(symLink)) {
-      await fs.unlink(symLink);
-    }
-    fs.symlinkSync(filePath, symLink);
+    // let symLink = path.join(openHabSnapshotFolder, 'front-door-latest.mp4');
+    // console.log('Creating symlink: ' + symLink);
+    // if (fs.existsSync(symLink)) {
+      // await fs.unlink(symLink);
+    // }
+    // fs.symlinkSync(filePath, symLink);
     console.log('Sending telegram');
     return bot.sendVideo(telegramChatId, filePath);
   } catch (error) {
