@@ -6,6 +6,7 @@ const TelegramBot = require('node-telegram-bot-api'),
 import 'dotenv/config'
 import {RingApi, RingCamera, SipSession} from '../api'
 import fs from 'promise-fs'
+import {readFile, writeFile} from "promise-fs";
 import * as path from 'path';
 
 const request = require('request-promise');
@@ -20,7 +21,7 @@ const {env} = process,
   openHabSnapshotUrl: string = env.OPENHAB_SNAPSHOT_URL as string,
   // openHabVideoUrl: string = env.OPENHAB_VIDEO_URL as string,
   videoLength: number = parseInt(env.VIDEO_LENGTH as string) || 4,
-  sendSnapshotForMotion = !!env.SEND_SNAPSHOT_MOTION,
+  sendSnapshotForMotion = env.SEND_SNAPSHOT_MOTION || false,
   watchDings: boolean = env.WATCH_DINGS !== 'FALSE',
   maxSnapshots = parseInt(env.MAX_SNAPSHOTS as string) || 3,
   snapshotInterval = (parseInt(env.SNAPSHOT_INTERVAL as string) * 1000) || 30000,
@@ -153,9 +154,6 @@ async function startStream(camera: RingCamera, publicOutputDirectory: string){
 
 async function main() {
   const ringApi = new RingApi({
-      // Replace with your ring email/password
-      email: env.RING_EMAIL!,
-      password: env.RING_PASS!,
       // Refresh token is used when 2fa is on
       refreshToken: process.env.RING_TOKEN!,
       // Listen for dings and motion events
@@ -167,10 +165,30 @@ async function main() {
     }),
     [camera] = await ringApi.getCameras();
 
+
+  ringApi.onRefreshTokenUpdated.subscribe(
+    async ({ newRefreshToken, oldRefreshToken }) => {
+      console.log('Refresh Token Updated: ', newRefreshToken)
+
+      // If you are implementing a project that use `ring-client-api`, you should subscribe to onRefreshTokenUpdated and update your config each time it fires an event
+      // Here is an example using a .env file for configuration
+      if (!oldRefreshToken) {
+        return
+      }
+
+      const currentConfig = await readFile('.env'),
+        updatedConfig = currentConfig
+          .toString()
+          .replace(oldRefreshToken, newRefreshToken);
+
+      await writeFile('.env', updatedConfig)
+    }
+  );
+
   if (camera && watchDings) {
     // await sendVideo(camera);
     (camera as any).snapshotLifeTime = 10000;
-    camera.onNewDing.subscribe(async ding => {
+    camera.onNewDing.subscribe(async (ding: any) => {
       if (processing) {
         return;
       }
@@ -188,10 +206,12 @@ async function main() {
           await Promise.all([updateOpenHabPromise, sendVideo(camera)].map(p => p.catch(e => e)))
             .then(results => console.log(results));
         } else if (ding.kind === 'motion') {
+          console.log('motion event');
           if (openHabMotionUrl && openHabMotionUrl.startsWith('http')) {
             await updateOpenHab(openHabMotionUrl, 'ON', 'Motion');
           }
           if (sendSnapshotForMotion) {
+            console.log('sending video for motion');
             await sendVideo(camera);
           }
         }
@@ -202,7 +222,8 @@ async function main() {
       }
     });
 
-    console.log('Listening for motion and doorbell presses on your cameras.')
+    console.log('Listening for motion and doorbell presses on your cameras.');
+    console.log('Sent snapshot for motion: ', sendSnapshotForMotion)
   } else {
     console.log('Not watching for dings, watch dings: ' + watchDings);
   }
