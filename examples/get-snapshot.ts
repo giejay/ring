@@ -11,7 +11,7 @@ import * as path from 'path';
 
 const request = require('request-promise');
 
-let processing = false;
+const processed: Record<string, boolean> = {};
 
 // let retrievingSnapshot = false, currentSnapshot: Buffer, snapshotSent: Buffer;
 const {env} = process,
@@ -21,7 +21,7 @@ const {env} = process,
   openHabSnapshotUrl: string = env.OPENHAB_SNAPSHOT_URL as string,
   // openHabVideoUrl: string = env.OPENHAB_VIDEO_URL as string,
   videoLength: number = parseInt(env.VIDEO_LENGTH as string) || 4,
-  sendSnapshotForMotion = env.SEND_SNAPSHOT_MOTION || false,
+  sendSnapshotForMotion: boolean = env.SEND_SNAPSHOT_MOTION === 'true',
   watchDings: boolean = env.WATCH_DINGS !== 'FALSE',
   maxSnapshots = parseInt(env.MAX_SNAPSHOTS as string) || 3,
   snapshotInterval = (parseInt(env.SNAPSHOT_INTERVAL as string) * 1000) || 30000,
@@ -168,7 +168,7 @@ async function main() {
 
   ringApi.onRefreshTokenUpdated.subscribe(
     async ({ newRefreshToken, oldRefreshToken }) => {
-      console.log('Refresh Token Updated: ', newRefreshToken)
+      console.log('Refresh Token Updated: ', newRefreshToken);
 
       // If you are implementing a project that use `ring-client-api`, you should subscribe to onRefreshTokenUpdated and update your config each time it fires an event
       // Here is an example using a .env file for configuration
@@ -189,7 +189,7 @@ async function main() {
     // await sendVideo(camera);
     (camera as any).snapshotLifeTime = 10000;
     camera.onNewDing.subscribe(async (ding: any) => {
-      if (processing) {
+      if (processed[ding.id_str]) {
         return;
       }
       const event =
@@ -199,7 +199,7 @@ async function main() {
           ? 'Doorbell pressed'
           : `Video started (${ding.kind})`;
       console.log(`${event} on ${camera.name} camera. Ding id ${ding.id_str}.  Received at ${new Date()}`);
-      processing = true;
+      processed[ding.id_str] = true;
       try {
         if (ding.kind === 'ding') {
           const updateOpenHabPromise = openHabRingUrl && openHabRingUrl.startsWith('http') ? updateOpenHab(openHabRingUrl, 'ON', 'Ring') : Promise.resolve();
@@ -217,8 +217,7 @@ async function main() {
         }
       } catch (error) {
         console.log('Error handling event', error);
-      } finally {
-        processing = false;
+        processed[ding.id_str] = false;
       }
     });
 
@@ -236,6 +235,7 @@ async function main() {
   }
 
   app.use('/send-video', async (req: any, res: any) => {
+    console.log('received send video request');
     await sendVideo(camera);
     res.status(200).send('send video to telegram');
   });
